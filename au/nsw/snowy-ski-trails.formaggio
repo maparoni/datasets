@@ -1,0 +1,92 @@
+---
+name: "Snowy Mountains Ski Trails (OSM)"
+note: "Ski trails, lifts and snow parks within 15 km of -36.435, 148.333, between Perisher and Thredbo. Regenerate with: geopinky run snowy-ski-trails.formaggio --no-cache > snowy-ski-trails-YYMMDD.geojson"
+category: "⛷️ Winter"
+sources:
+  - name: "© OpenStreetMap contributors"
+    kind: "data"
+    url: "https://www.openstreetmap.org/copyright"
+  - name: "Overpass API"
+    kind: "data"
+    url: "https://overpass-api.de"
+---
+
+### Data Pipeline
+
+$trails = fetch(method: .post) { "https://overpass-api.de/api/interpreter" }
+|> add_header("Content-Type") { "application/x-www-form-urlencoded" }
+|> post_body { "data=[out:json][timeout:180];(way[\"piste:type\"][\"piste:type\"!=\"snow_park\"](around:15000,-36.435,148.333);way[\"route\"=\"ski\"](around:15000,-36.435,148.333););out geom tags;" }
+|> parse_json(
+  path: "elements",
+  location: [
+    [path: "geometry[].lat", mode: "latitude"],
+    [path: "geometry[].lon", mode: "longitude", geometry: "LineString"]
+  ],
+  properties: [
+    "name": "tags.name?",
+    "route": "tags.route?",
+    "piste_type": "tags.piste:type?",
+    "piste_difficulty": "tags.piste:difficulty?",
+    "piste_grooming": "tags.piste:grooming?",
+    "piste_ref": "tags.piste:ref?",
+    "surface": "tags.surface?",
+    "aerialway": "tags.aerialway?"
+  ],
+  id_path: "id"
+)
+|> filter { (`aerialway` ?? '') == '' }
+|> map { l ->
+  l |> set(.category) { "Trail" }
+}
+
+$lifts = fetch(method: .post) { "https://overpass-api.de/api/interpreter" }
+|> add_header("Content-Type") { "application/x-www-form-urlencoded" }
+|> post_body { "data=[out:json][timeout:180];(way[\"aerialway\"](around:15000,-36.435,148.333););out geom tags;" }
+|> parse_json(
+  path: "elements",
+  location: [
+    [path: "geometry[].lat", mode: "latitude"],
+    [path: "geometry[].lon", mode: "longitude", geometry: "LineString"]
+  ],
+  properties: [
+    "name": "tags.name?",
+    "route": "tags.route?",
+    "piste_type": "tags.piste:type?",
+    "piste_difficulty": "tags.piste:difficulty?",
+    "piste_grooming": "tags.piste:grooming?",
+    "piste_ref": "tags.piste:ref?",
+    "surface": "tags.surface?",
+    "aerialway": "tags.aerialway?"
+  ],
+  id_path: "id"
+)
+|> map { l ->
+  l |> set(.category) { "Lift" }
+}
+
+$parks = fetch(method: .post) { "https://overpass-api.de/api/interpreter" }
+|> add_header("Content-Type") { "application/x-www-form-urlencoded" }
+|> post_body { "data=[out:json][timeout:180];(way[\"piste:type\"=\"snow_park\"](around:15000,-36.435,148.333););out geom tags;" }
+|> parse_json(
+  path: "elements",
+  location: [
+    [path: "geometry[].lat", mode: "latitude"],
+    [path: "geometry[].lon", mode: "longitude", geometry: "Polygon"]
+  ],
+  properties: [
+    "name": "tags.name?",
+    "route": "tags.route?",
+    "piste_type": "tags.piste:type?",
+    "piste_difficulty": "tags.piste:difficulty?",
+    "piste_grooming": "tags.piste:grooming?",
+    "piste_ref": "tags.piste:ref?",
+    "surface": "tags.surface?",
+    "aerialway": "tags.aerialway?"
+  ],
+  id_path: "id"
+)
+|> map { l ->
+  l |> set(.category) { "Snow Park" }
+}
+
+$trails + $lifts + $parks
